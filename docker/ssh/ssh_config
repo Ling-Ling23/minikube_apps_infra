@@ -1,0 +1,3 @@
+Host *
+    IdentityFile /run/secrets/id_rsa_app
+    StrictHostKeyChecking no

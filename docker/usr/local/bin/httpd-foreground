@@ -1,0 +1,14 @@
+#!/bin/sh
+
+if [ -f "/etc/apache2/envvars" ]; then
+    . "/etc/apache2/envvars"
+fi
+
+if [ -e "/usr/sbin/httpd" ]; then
+    HTTPD="/usr/sbin/httpd"
+elif [ -e "/usr/sbin/apache2ctl" ]; then
+    HTTPD="/usr/sbin/apache2ctl"
+fi
+
+exec $HTTPD -DFOREGROUND
+

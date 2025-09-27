@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: py3miniapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: py3miniapp
+  template:
+    metadata:
+      labels:
+        app: py3miniapp
+    spec:
+      containers:
+      - name: py3miniapp
+        image: ghcr.io/ling-ling23/py3miniapp:v1
+        ports:
+        - containerPort: 5000
+        env:
+        - name: PROJECT_DIR
+          value: "/app/src"
+        - name: PROJECT_GIT_BRANCH
+          value: "main"
+        - name: PROJECT_GIT_URL
+          value: "git@github.com:Ling-Ling23/minikube_apps_infra_app_one.git"

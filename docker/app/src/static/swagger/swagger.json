@@ -1,0 +1,80 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+      "description": "Andy Test",
+      "version": "1.0.0",
+      "title": "ANDY Title",
+      "license": {
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT"
+      }
+    },
+    "tags": [
+        {
+          "name": "Test Project",
+          "description": "test project desc"
+        }
+    ],
+    "paths": {
+        "/test_get": {
+          "get": {
+            "tags": [
+              "GET API"
+            ],
+            "summary": "Returns data",
+            "produces": [
+              "application/json"
+            ],
+            "responses": {
+              "200": {
+                "description": "OK"
+              }
+            }
+          }
+        },
+        "/test_post": {
+          "post": {
+            "tags": [
+              "POST API"
+            ],
+            "summary": "Returns data",
+            "requestBody": {
+              "description": "desc 2",
+              "required": true,
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/post_api"
+                  }
+                }
+              }
+            },
+            "produces": [
+              "application/json"
+            ],
+            "responses": {
+              "200": {
+                "description": "OK",
+                "schema": {
+                  "$ref": "#/components/schemas/post_api"
+                }
+              }
+            }
+          }
+        }
+
+      },
+    "components": {
+        "schemas": {
+          "post_api": {
+            "type": "object",
+            "properties": {
+              "new_item": {
+                "type": "string",
+                "format": "any format"
+              }
+            }
+          }
+        }
+      }
+    }
