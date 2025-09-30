@@ -12,5 +12,5 @@ if [ -n "$PROJECT_GIT_URL" ]; then
         echo "Clone failed."
         exit 1
     fi
-    apach2ctl restart
+    apach2ctl restart # this will mess up with supervisord apache2 process start
 fi

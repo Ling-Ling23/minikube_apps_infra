@@ -26,4 +26,4 @@ fi
 # set/fix permissions for htdocs
 echo "${HTTPD_USER}:${HTTPD_GROUP} ${HTDOCS_DIR}"
 chown -R ${HTTPD_USER}:${HTTPD_GROUP} ${HTDOCS_DIR}
-apache2ctl restart
+#apache2ctl restart

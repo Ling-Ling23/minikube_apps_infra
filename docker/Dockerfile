@@ -66,8 +66,8 @@ RUN set -ex \
 
 
 RUN a2ensite FlaskApp
-RUN apache2ctl restart
-RUN sleep 3
+#RUN apache2ctl restart
+#RUN sleep 3
 
 # Setup environment
 ENV SHELL="/bin/bash" \
