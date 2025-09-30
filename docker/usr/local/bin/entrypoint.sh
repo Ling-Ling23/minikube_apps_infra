@@ -13,6 +13,7 @@ forks=/etc/entrypoint.d/fork/*
 for fork in ${forks}; do 
     echo "$TAG: running $fork"
     chmod a+rx $fork
+    echo "Starting $fork in background ..."
     $fork &
 done
 

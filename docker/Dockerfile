@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN apt-get install -y apache2 --no-install-recommends ; apt-get install -y libapache2-mod-wsgi-py3 --no-install-recommends
 RUN a2enmod wsgi
+RUN rm -rf /etc/apache2/sites-available/000-default.conf
+RUN rm -rf /etc/apache2/sites-enabled/000-default.conf
 
 
 # Copy SSH private key for app_one
@@ -30,13 +32,15 @@ COPY ./ssh/ssh_config /etc/ssh/ssh_config
 WORKDIR /app
 
 COPY ./requirements.txt /app
-COPY ./app/wsgi.ini /app/wsgi.ini
-COPY ./app/wsgi.py /app/wsgi.py
+#COPY ./app/wsgi.ini /app/wsgi.ini
+#COPY ./app/wsgi.py /app/wsgi.py
 COPY ./app/FlaskApp.wsgi /app/FlaskApp.wsgi
 COPY ./app/src/app.py /app/src/app.py
 COPY ./app/src/static/ /app/src/static/
 COPY ./usr/local/bin/ /usr/local/bin/
+COPY ./rootfs/etc/supervisord.conf/ /etc/supervisor/supervisord.conf
 COPY ./rootfs/etc/entrypoint.d/ /etc/entrypoint.d/
+COPY ./rootfs/etc/supervisor.d/ /etc/supervisor.d/
 
 
 RUN python3 -m venv /venv
@@ -85,4 +89,5 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 5000
 VOLUME ["/app/src"]
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
 #CMD ["uwsgi", "--ini", "/app/wsgi.ini"]

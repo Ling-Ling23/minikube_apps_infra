@@ -1,5 +1,5 @@
 #!/bin/bash
-
+echo "Setup Apache2 ...start"
 export APP_USER="${APP_USER:-www-data}"
 export APP_GROUP="${APP_GROUP:-www-data}"
 export HTTPD_PORT="${HTTPD_PORT:-80}"
@@ -7,6 +7,7 @@ export HTDOCS_DIR="${HTDOCS_DIR:-/app/src}"
 export HTTPD_USER="${APP_USER}"
 export HTTPD_GROUP="${APP_GROUP}"
 
+echo "Setup Apache2 ..."
 sed -i \
     -e "s/#LoadModule rewrite_module/LoadModule rewrite_module/" \
     -e "s/^User .*/User ${HTTPD_USER}/" \

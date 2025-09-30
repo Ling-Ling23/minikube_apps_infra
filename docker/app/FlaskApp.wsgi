@@ -4,4 +4,4 @@ import sys, os
 sys.path.insert(1, os.path.dirname(__file__))
 
 # Construct a Flask instance "app" via actual package's __init__.py
-import app as application
+from src.app import app as application
