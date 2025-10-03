@@ -12,6 +12,10 @@ def send_static(path):
     """set path to static files"""
     return send_from_directory('static', path)
 
+@app.route("/live")
+def live():
+    return {"status": "alive"}, 200
+
 @app.route("/")
 def hello():
     html = "<h3>Hello Andy!!</h3>" \
