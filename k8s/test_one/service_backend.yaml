@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: py3miniapp-backend-service
+spec:
+  selector:
+    app: py3miniapp-backend
+  ports:
+    - protocol: TCP
+      port: 5000
+      targetPort: 80
+  type: NodePort
+# port in the range 30000–32767, Avoid hardcoding NodePorts unless necessary

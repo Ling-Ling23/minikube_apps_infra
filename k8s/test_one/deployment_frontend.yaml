@@ -1,22 +1,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: py3miniapp
+  name: py3miniapp-frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: py3miniapp
+      app: py3miniapp-frontend
   template:
     metadata:
       labels:
-        app: py3miniapp
+        app: py3miniapp-frontend
     spec:
       containers:
-      - name: py3miniapp
+      - name: py3miniapp-frontend
         image: ghcr.io/ling-ling23/py3miniapp:v1
         ports:
-        - containerPort: 5000
+        - containerPort: 80
         env:
         - name: PROJECT_DIR
           value: "/app/src"
