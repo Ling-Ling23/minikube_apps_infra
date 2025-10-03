@@ -15,6 +15,7 @@ spec:
       containers:
       - name: py3miniapp-backend
         image: ghcr.io/ling-ling23/py3miniapp:v1
+        #imagePullPolicy: Always
         ports:
         - containerPort: 80
         env:

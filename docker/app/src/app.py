@@ -1,4 +1,5 @@
-import os, socket
+import os, socket, time
+from datetime import datetime
 from flask import Flask, jsonify, send_from_directory, request
 from flask_swagger_ui import get_swaggerui_blueprint
 
@@ -6,6 +7,7 @@ app = Flask(__name__)
 
 #DATA_SET = ['1', '2', '3'] # some data
 
+START_TIME = time.time()
 
 @app.route(f'/static/<path:path>')
 def send_static(path):
