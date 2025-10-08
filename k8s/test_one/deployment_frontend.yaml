@@ -16,6 +16,21 @@ spec:
       - name: py3miniapp-frontend
         image: ghcr.io/ling-ling23/py3miniapp:v1
         #imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 80
+          initialDelaySeconds: 15
+          failureThreshold: 10
+          timeoutSeconds: 2
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: "100m" #0.1 cpu - 100 millicores
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
         ports:
         - containerPort: 80
         env:

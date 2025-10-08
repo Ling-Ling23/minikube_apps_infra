@@ -3,8 +3,8 @@ kind: Ingress
 metadata:
   name: my-app-ingress
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-    # cert-manager local CA issuer (namespaced Issuer)
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2    # cert-manager local CA issuer (namespaced Issuer)
     cert-manager.io/issuer: "local-root-ca-issuer"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -18,15 +18,15 @@ spec:
   - host: myapp.local
     http:
       paths:
-      - path: /app1_backend
-        pathType: Prefix
+      - path: /app1_backend(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: py3miniapp-backend-service
             port:
               number: 5000
-      - path: /app1_frontend
-        pathType: Prefix
+      - path: /app1_frontend(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: py3miniapp-frontend-service

@@ -86,6 +86,8 @@ main() {
   ensure_known_host "$(extract_host "$PROJECT_GIT_URL")"
 
   if git_clone_with_retries "$PROJECT_GIT_URL" "$PROJECT_GIT_BRANCH" "$PROJECT_DIR"; then
+    sleep 2
+    apache2ctl restart
     exit 0
   else
     err "Failed to clone $PROJECT_GIT_URL"
