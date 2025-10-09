@@ -1,10 +1,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: monitoring-ingress
+  name: grafana-ingress
   namespace: monitoring
   annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
     cert-manager.io/issuer: "local-root-ca-issuer"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -25,6 +24,28 @@ spec:
             name: prometheus-grafana
             port:
               number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prometheus-ingress
+  namespace: monitoring
+  annotations:
+    cert-manager.io/issuer: "local-root-ca-issuer"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-redirect-from: "~^http://([^/]+)/(.*)"
+    nginx.ingress.kubernetes.io/proxy-redirect-to: "https://myapp.local/prometheus/$2"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - myapp.local
+    secretName: myapp-local-tls-prometheus
+  rules:
+  - host: myapp.local
+    http:
+      paths:
       - path: /prometheus
         pathType: Prefix
         backend:

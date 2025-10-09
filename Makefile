@@ -16,11 +16,25 @@ help:
 	@echo "  logs-frontend - Tail frontend pod logs"
 	@echo "  ca-export  - Export local root CA to $(CA_FILE)"
 	@echo "  cleanup    - Delete manifests applied by deploy"
+	@echo "  hpa-status - Show HorizontalPodAutoscaler status"
+	@echo "  load-test  - Start load test to trigger HPA scaling"
+	@echo "  stop-load-test - Stop load test"
 	@echo "  install-prometheus - Install Prometheus stack via Helm (idempotent)"
 	@echo "  setup-monitoring-ingress - Set up ingress for Grafana/Prometheus"
 	@echo "  fix-monitoring-subpaths - Fix Grafana/Prometheus subpath configuration"
 	@echo "  fix-grafana-loop - Fix Grafana redirect loop issue"
 	@echo "  prometheus-ui - Access Grafana at http://localhost:3000"
+
+.PHONY: deploy-all
+deploy-all:
+	@echo "Deploying app and setting up monitoring..."
+	@echo "Certs needs to be done manually..."
+	"$(MAKE)" ca-export
+	"$(MAKE)" deploy-dev
+	"$(MAKE)" install-prometheus
+	"$(MAKE)" setup-monitoring-ingress
+	"$(MAKE)" fix-monitoring-subpaths
+
 
 .PHONY: deploy-dev
 deploy-dev:
@@ -50,15 +64,38 @@ logs-frontend:
 .PHONY: ca-export
 ca-export:
 	@echo "Exporting root CA from secret '$(CA_SECRET)' in $(NAMESPACE) to $(CA_FILE)"
+	@if ! $(KUBECTL) -n $(NAMESPACE) get secret $(CA_SECRET) >/dev/null 2>&1; then \
+		echo "Secret $(CA_SECRET) not found in namespace $(NAMESPACE)"; \
+		exit 1; \
+	fi
 	@mkdir -p $(dir $(CA_FILE))
-	$(KUBECTL) -n $(NAMESPACE) get secret $(CA_SECRET) -o go-template='{{index .data "ca.crt"}}' | base64 -d > $(CA_FILE)
-	@echo "Wrote $(CA_FILE)"
+	@if [ -f "$(CA_FILE)" ]; then \
+		echo "$(CA_FILE) already exists, checking if update needed..."; \
+		current_hash=$$($(KUBECTL) -n $(NAMESPACE) get secret $(CA_SECRET) -o go-template='{{index .data "ca.crt"}}' | sha256sum | cut -d' ' -f1); \
+		file_hash=$$(base64 "$(CA_FILE)" | tr -d '\n' | sha256sum | cut -d' ' -f1); \
+		if [ "$$current_hash" = "$$file_hash" ]; then \
+			echo "$(CA_FILE) is up-to-date"; \
+		else \
+			echo "Updating $(CA_FILE)..."; \
+			$(KUBECTL) -n $(NAMESPACE) get secret $(CA_SECRET) -o go-template='{{index .data "ca.crt"}}' | base64 -d > $(CA_FILE); \
+			echo "Updated $(CA_FILE)"; \
+		fi; \
+	else \
+		echo "Creating $(CA_FILE)..."; \
+		$(KUBECTL) -n $(NAMESPACE) get secret $(CA_SECRET) -o go-template='{{index .data "ca.crt"}}' | base64 -d > $(CA_FILE); \
+		echo "Created $(CA_FILE)"; \
+	fi
 
 .PHONY: cleanup
 cleanup:
 	-$(KUBECTL) delete -f k8s/apps/app_one/ --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/cluster-issuer.yaml --ignore-not-found
+	@echo "Cleaning up monitoring stack..."
+	-helm uninstall prometheus -n monitoring
+	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
+	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
+	-$(KUBECTL) delete namespace monitoring --ignore-not-found
 	@echo "Cleanup complete (controllers may recreate some cert-manager resources)."
 
 .PHONY: install-prometheus
@@ -133,3 +170,14 @@ fix-grafana-loop:
 	$(KUBECTL) rollout restart deployment prometheus-grafana -n monitoring
 	$(KUBECTL) rollout status deployment prometheus-grafana -n monitoring --timeout=120s
 	@echo "Grafana loop fix complete! Try accessing https://myapp.local/grafana again"
+
+.PHONY: hpa-status
+hpa-status:
+	@echo "=== HorizontalPodAutoscaler Status ==="
+	kubectl get hpa
+	@echo ""
+	@echo "=== Current Pod Replicas ==="
+	kubectl get deployment py3miniapp-backend -o custom-columns=NAME:.metadata.name,REPLICAS:.spec.replicas,READY:.status.readyReplicas
+	@echo ""
+	@echo "=== Recent HPA Events ==="
+	kubectl describe hpa py3miniapp-backend-hpa | tail -10
