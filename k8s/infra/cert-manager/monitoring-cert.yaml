@@ -1,0 +1,50 @@
+---
+# Copy of root CA issuer for monitoring namespace
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: local-root-ca-issuer
+  namespace: monitoring
+spec:
+  ca:
+    secretName: local-root-ca-secret
+
+---
+# Leaf certificate for monitoring namespace
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: myapp-local-cert-monitoring
+  namespace: monitoring
+spec:
+  secretName: myapp-local-tls-monitoring
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d before expiry
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  dnsNames:
+    - myapp.local
+  issuerRef:
+    name: local-root-ca-issuer
+    kind: Issuer
+
+---
+# Additional certificate for Prometheus ingress
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: myapp-local-cert-prometheus
+  namespace: monitoring
+spec:
+  secretName: myapp-local-tls-prometheus
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d before expiry
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  dnsNames:
+    - myapp.local
+  issuerRef:
+    name: local-root-ca-issuer
+    kind: Issuer
