@@ -19,19 +19,24 @@ help:
 	@echo "  hpa-status - Show HorizontalPodAutoscaler status"
 	@echo "  load-test  - Start load test to trigger HPA scaling"
 	@echo "  stop-load-test - Stop load test"
+	@echo "  pdb-status - Show PodDisruptionBudget status"
 	@echo "  install-prometheus - Install Prometheus stack via Helm (idempotent)"
+	@echo "  install-loki - Install Loki stack for centralized logging"
+	@echo "  setup-logs-dashboard - Deploy logs dashboard to Grafana"
 	@echo "  setup-monitoring-ingress - Set up ingress for Grafana/Prometheus"
 	@echo "  fix-monitoring-subpaths - Fix Grafana/Prometheus subpath configuration"
 	@echo "  fix-grafana-loop - Fix Grafana redirect loop issue"
 	@echo "  prometheus-ui - Access Grafana at http://localhost:3000"
+	@echo "  logs-loki-query - Query logs from Loki (backend, frontend, errors)"
 
 .PHONY: deploy-all
 deploy-all:
-	@echo "Deploying app and setting up monitoring..."
+	@echo "Deploying app and setting up monitoring with logging..."
 	@echo "Certs needs to be done manually..."
 	"$(MAKE)" ca-export
 	"$(MAKE)" deploy-dev
 	"$(MAKE)" install-prometheus
+	"$(MAKE)" install-loki
 	"$(MAKE)" setup-monitoring-ingress
 	"$(MAKE)" fix-monitoring-subpaths
 
@@ -91,8 +96,10 @@ cleanup:
 	-$(KUBECTL) delete -f k8s/apps/app_one/ --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/cluster-issuer.yaml --ignore-not-found
-	@echo "Cleaning up monitoring stack..."
+	@echo "Cleaning up monitoring and logging stack..."
 	-helm uninstall prometheus -n monitoring
+	-helm uninstall loki -n monitoring
+	-$(KUBECTL) delete -f k8s/infra/monitoring/logs-dashboard.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
 	-$(KUBECTL) delete namespace monitoring --ignore-not-found
@@ -120,6 +127,88 @@ install-prometheus:
 prometheus-ui:
 	@echo "Access Grafana at http://localhost:3000 (admin/prom-operator)"
 	kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80
+
+# Loki logging stack targets
+.PHONY: install-loki
+install-loki:
+	@echo "Installing Loki stack via Helm..."
+	helm repo add grafana https://grafana.github.io/helm-charts
+	helm repo update
+	@if helm list -n monitoring | grep -q loki; then \
+		echo "Loki already installed, skipping helm install"; \
+	else \
+		echo "Installing Loki stack..."; \
+		helm install loki grafana/loki-stack \
+		  --namespace monitoring \
+		  --set grafana.enabled=false \
+		  --set promtail.enabled=true \
+		  --set loki.persistence.enabled=true \
+		  --set loki.persistence.size=10Gi; \
+	fi
+	@echo "Setting up logs dashboard..."
+	"$(MAKE)" setup-logs-dashboard
+
+.PHONY: setup-logs-dashboard
+setup-logs-dashboard:
+	@echo "Deploying logs dashboard to Grafana..."
+	$(KUBECTL) apply -f k8s/infra/monitoring/logs-dashboard.yaml
+	@echo "Restarting Grafana to load dashboard..."
+	$(KUBECTL) rollout restart deployment prometheus-grafana -n monitoring
+	@echo "Dashboard will be available at: https://myapp.local/grafana/d/app-logs-001"
+
+.PHONY: logs-loki-query logs-loki-backend logs-loki-frontend logs-loki-errors logs-loki-live
+logs-loki-query:
+	@echo "=== Loki Log Query Options ==="
+	@echo "Backend logs:  make logs-loki-backend"
+	@echo "Frontend logs: make logs-loki-frontend" 
+	@echo "Error logs:    make logs-loki-errors"
+	@echo "Live logs:     make logs-loki-live"
+	@echo ""
+	@echo "Or use Grafana Explore: https://myapp.local/grafana/explore"
+
+logs-loki-backend:
+	@echo "Querying backend logs from Loki (last 1h)..."
+	@kubectl port-forward -n monitoring svc/loki 3100:3100 >/dev/null 2>&1 & \
+	PID=$$!; \
+	sleep 2; \
+	echo "Recent backend logs:"; \
+	curl -s "http://localhost:3100/loki/api/v1/query_range?query={pod=~\"py3miniapp-backend.*\"}&start=$$(date -d '1 hour ago' -u +%s)000000000&end=$$(date -u +%s)000000000&limit=20" | \
+	jq -r '.data.result[]?.values[]?[1]' 2>/dev/null | head -20 || echo "Install jq for formatted output"; \
+	kill $$PID 2>/dev/null || true
+
+logs-loki-frontend:
+	@echo "Querying frontend logs from Loki (last 1h)..."
+	@kubectl port-forward -n monitoring svc/loki 3100:3100 >/dev/null 2>&1 & \
+	PID=$$!; \
+	sleep 2; \
+	echo "Recent frontend logs:"; \
+	curl -s "http://localhost:3100/loki/api/v1/query_range?query={pod=~\"py3miniapp-frontend.*\"}&start=$$(date -d '1 hour ago' -u +%s)000000000&end=$$(date -u +%s)000000000&limit=20" | \
+	jq -r '.data.result[]?.values[]?[1]' 2>/dev/null | head -20 || echo "Install jq for formatted output"; \
+	kill $$PID 2>/dev/null || true
+
+logs-loki-errors:
+	@echo "Querying error logs from Loki (last 1h)..."
+	@kubectl port-forward -n monitoring svc/loki 3100:3100 >/dev/null 2>&1 & \
+	PID=$$!; \
+	sleep 2; \
+	echo "Recent error logs:"; \
+	curl -s "http://localhost:3100/loki/api/v1/query_range?query={namespace=\"default\"} |= \"error\"&start=$$(date -d '1 hour ago' -u +%s)000000000&end=$$(date -u +%s)000000000&limit=30" | \
+	jq -r '.data.result[]?.values[]?[1]' 2>/dev/null | head -30 || echo "Install jq for formatted output"; \
+	kill $$PID 2>/dev/null || true
+
+logs-loki-live:
+	@echo "=== Live Log Streaming Instructions ==="
+	@echo "1. Open Grafana: https://myapp.local/grafana/explore"
+	@echo "2. Select 'Loki' datasource from dropdown"
+	@echo "3. Enter query: {pod=~\"py3miniapp.*\"}"
+	@echo "4. Click 'Live' button for real-time streaming"
+	@echo "5. Use time range selector for historical logs"
+	@echo ""
+	@echo "Useful queries:"
+	@echo "  All app logs:    {pod=~\"py3miniapp.*\"}"
+	@echo "  Backend only:    {pod=~\"py3miniapp-backend.*\"}"
+	@echo "  Frontend only:   {pod=~\"py3miniapp-frontend.*\"}"
+	@echo "  Error filtering: {namespace=\"default\"} |= \"error\""
 
 .PHONY: setup-monitoring-ingress
 setup-monitoring-ingress:
@@ -181,3 +270,14 @@ hpa-status:
 	@echo ""
 	@echo "=== Recent HPA Events ==="
 	kubectl describe hpa py3miniapp-backend-hpa | tail -10
+
+.PHONY: pdb-status
+pdb-status:
+	@echo "=== PodDisruptionBudget Status ==="
+	kubectl get pdb
+	@echo ""
+	@echo "=== PDB Details ==="
+	kubectl describe pdb py3miniapp-backend-pdb
+	@echo ""
+	@echo "=== Backend Pods ==="
+	kubectl get pods -l app=py3miniapp-backend -o wide
