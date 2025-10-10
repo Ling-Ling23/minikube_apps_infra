@@ -1,0 +1,5 @@
+Flask
+uwsgi
+flask-swagger-ui==4.11.1
+pyswagger==0.8.39
+swagger-spec-validator==2.7.3

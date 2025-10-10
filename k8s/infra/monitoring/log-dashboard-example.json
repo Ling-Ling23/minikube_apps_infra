@@ -1,0 +1,43 @@
+{
+  "dashboard": {
+    "title": "Application Logs Dashboard",
+    "panels": [
+      {
+        "title": "Recent Application Logs",
+        "type": "logs",
+        "datasource": "Loki",
+        "targets": [
+          {
+            "expr": "{namespace=\"default\", app=~\"py3miniapp.*\"}"
+          }
+        ],
+        "options": {
+          "showTime": true,
+          "showLabels": false,
+          "showCommonLabels": true,
+          "wrapLogMessage": true
+        }
+      },
+      {
+        "title": "Error Logs Only",
+        "type": "logs", 
+        "datasource": "Loki",
+        "targets": [
+          {
+            "expr": "{namespace=\"default\"} |= \"error\" or |= \"ERROR\" or |= \"Error\""
+          }
+        ]
+      },
+      {
+        "title": "Log Rate by Pod",
+        "type": "stat",
+        "datasource": "Loki", 
+        "targets": [
+          {
+            "expr": "rate({namespace=\"default\"}[5m])"
+          }
+        ]
+      }
+    ]
+  }
+}

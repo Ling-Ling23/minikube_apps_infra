@@ -1,0 +1,65 @@
+#############################################
+# cert-manager chain for local development  #
+# Option A: SelfSigned root -> CA -> Leaf   #
+# Namespace: default                        #
+# Resulting leaf secret: myapp-local-tls    #
+#############################################
+
+# 1. Bootstrap a temporary self-signed root issuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+
+---
+# 2. Use bootstrap issuer to mint a root CA certificate (stored as a secret)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: local-root-ca
+  namespace: default
+spec:
+  isCA: true
+  commonName: local.dev.root.ca
+  secretName: local-root-ca-secret
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+
+---
+# 3. Define a namespaced Issuer backed by the generated CA secret
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: local-root-ca-issuer
+  namespace: default
+spec:
+  ca:
+    secretName: local-root-ca-secret
+
+---
+# 4. Leaf certificate for application hostnames
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: myapp-local-cert
+  namespace: default
+spec:
+  secretName: myapp-local-tls
+  duration: 2160h # 90d
+  renewBefore: 360h # 15d before expiry
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  dnsNames:
+    - myapp.local
+    # Add more hostnames here if needed, e.g. www.myapp.local, api.myapp.local
+  issuerRef:
+    name: local-root-ca-issuer
+    kind: Issuer
