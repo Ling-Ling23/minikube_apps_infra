@@ -22,6 +22,8 @@ help:
 	@echo "  pdb-status - Show PodDisruptionBudget status"
 	@echo "  install-prometheus - Install Prometheus stack via Helm (idempotent)"
 	@echo "  install-loki - Install Loki stack for centralized logging"
+	@echo "  install-fluent-bit - Install classic Fluent Bit DaemonSet (no operator)"
+	@echo "  migrate-to-fluent - Replace Promtail with FluentOperator"
 	@echo "  setup-logs-dashboard - Deploy logs dashboard to Grafana"
 	@echo "  setup-monitoring-ingress - Set up ingress for Grafana/Prometheus"
 	@echo "  fix-monitoring-subpaths - Fix Grafana/Prometheus subpath configuration"
@@ -99,10 +101,12 @@ cleanup:
 	@echo "Cleaning up monitoring and logging stack..."
 	-helm uninstall prometheus -n monitoring
 	-helm uninstall loki -n monitoring
+	-$(KUBECTL) delete -f k8s/infra/logging/fluent-bit-classic.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/monitoring/logs-dashboard.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
 	-$(KUBECTL) delete namespace monitoring --ignore-not-found
+	-$(KUBECTL) delete namespace fluent-bit --ignore-not-found
 	@echo "Cleanup complete (controllers may recreate some cert-manager resources)."
 
 .PHONY: install-prometheus
@@ -209,6 +213,54 @@ logs-loki-live:
 	@echo "  Backend only:    {pod=~\"py3miniapp-backend.*\"}"
 	@echo "  Frontend only:   {pod=~\"py3miniapp-frontend.*\"}"
 	@echo "  Error filtering: {namespace=\"default\"} |= \"error\""
+
+# Classic Fluent Bit DaemonSet targets for replacing Promtail
+.PHONY: install-fluent-bit migrate-to-fluent-bit test-fluent-logs remove-promtail
+install-fluent-bit:
+	@echo "Installing classic Fluent Bit DaemonSet..."
+	$(KUBECTL) apply -f k8s/infra/logging/fluent-bit-classic.yaml
+	@echo "Waiting for Fluent Bit pods to be ready..."
+	$(KUBECTL) rollout status daemonset/fluent-bit -n fluent-bit --timeout=120s
+	@echo "Fluent Bit DaemonSet deployed successfully!"
+	@echo "Check pods: kubectl get pods -n fluent-bit"
+
+migrate-to-fluent-bit:
+	@echo "=== Migrating from Promtail to Fluent Bit DaemonSet ==="
+	@echo "Step 1: Installing Fluent Bit alongside Promtail..."
+	"$(MAKE)" install-fluent-bit
+	@echo ""
+	@echo "Step 2: Testing log collection (both will run temporarily)..."
+	"$(MAKE)" test-fluent-logs
+	@echo ""
+	@echo "Step 3: Remove Promtail after confirming Fluent Bit works..."
+	@echo "Run: make remove-promtail"
+
+test-fluent-logs:
+	@echo "=== Testing Fluent Bit Log Collection ==="
+	@echo "Checking Fluent Bit pods..."
+	$(KUBECTL) get pods -n fluent-bit
+	@echo ""
+	@echo "Checking resource usage comparison:"
+	@echo "Promtail usage:"
+	@kubectl top pods -n monitoring | grep promtail || echo "kubectl top not available"
+	@echo "Fluent Bit usage:"
+	@kubectl top pods -n fluent-bit | grep fluent-bit || echo "kubectl top not available"
+	@echo ""
+	@echo "Checking logs in Loki (should see both sources temporarily):"
+	@echo "Open Grafana and check for logs with job=\"fluent-bit\" label"
+
+remove-promtail:
+	@echo "=== Removing Promtail (CAUTION: Make sure Fluent Bit is working!) ==="
+	@read -p "Are you sure Fluent Bit is collecting logs correctly? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		echo "Removing Promtail..."; \
+		helm upgrade loki grafana/loki-stack -n monitoring \
+		  --reuse-values \
+		  --set promtail.enabled=false; \
+		echo "Promtail removed. Only Fluent Bit now collecting logs."; \
+	else \
+		echo "Cancelled. Test Fluent Bit thoroughly before removing Promtail."; \
+	fi
 
 .PHONY: setup-monitoring-ingress
 setup-monitoring-ingress:
