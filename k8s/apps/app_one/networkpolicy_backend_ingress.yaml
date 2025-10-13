@@ -1,0 +1,62 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: py3miniapp-backend-ingress-only
+  namespace: default
+spec:
+  # Apply this policy to backend pods
+  podSelector:
+    matchLabels:
+      app: py3miniapp-backend
+  
+  # Default deny all traffic
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  # Allow ingress traffic
+  ingress:
+  # 1. Allow traffic from NGINX Ingress Controller
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+          app.kubernetes.io/component: controller
+    ports:
+    - protocol: TCP
+      port: 80
+  
+  # 2. Allow health checks from Kubernetes (for liveness/readiness probes)
+  - from: []  # Allow from any source
+    ports:
+    - protocol: TCP
+      port: 80
+    # This is needed for kubelet health checks
+  
+  # Allow egress traffic (backend needs to make outbound connections)
+  egress:
+  # 1. Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  
+  # 2. Allow HTTPS for git clone and external APIs
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  
+  # 3. Allow SSH for git clone (if using SSH URLs)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 22
+  
+  # 4. Allow HTTP for package downloads, webhooks, etc.
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80

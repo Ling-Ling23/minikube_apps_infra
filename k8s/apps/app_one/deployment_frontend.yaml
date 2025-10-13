@@ -37,6 +37,6 @@ spec:
         - name: PROJECT_DIR
           value: "/app/src"
         - name: PROJECT_GIT_BRANCH
-          value: "main"
+          value: "${PROJECT_GIT_BRANCH}"
         - name: PROJECT_GIT_URL
           value: "git@github.com:Ling-Ling23/minikube_apps_infra_app_one.git"

@@ -1,0 +1,68 @@
+# Development-specific deployment with host path mounting
+# This would be in k8s/overlays/dev/ if using Kustomize
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: py3miniapp-backend
+spec:
+  replicas: 1  # Single replica for development
+  selector:
+    matchLabels:
+      app: py3miniapp-backend
+  template:
+    metadata:
+      labels:
+        app: py3miniapp-backend
+    spec:
+      serviceAccountName: py3miniapp-backend-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+      containers:
+      - name: py3miniapp-backend
+        image: ghcr.io/ling-ling23/py3miniapp:v1
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          readOnlyRootFilesystem: false  # Development mode
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        ports:
+        - containerPort: 80
+        env:
+        - name: PROJECT_DIR
+          value: "/app/src"
+        - name: PROJECT_GIT_BRANCH
+          value: "${PROJECT_GIT_BRANCH}"
+        - name: PROJECT_GIT_URL
+          value: "git@github.com:Ling-Ling23/minikube_apps_infra_app_one.git"
+        # Mount host directory for live code editing
+        volumeMounts:
+        - name: source-code
+          mountPath: /app/src
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 80
+          initialDelaySeconds: 15
+          failureThreshold: 10
+          timeoutSeconds: 2
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+      volumes:
+      - name: source-code
+        hostPath:
+          path: /path/to/your/local/code  # This would be your local dev directory
+          type: Directory

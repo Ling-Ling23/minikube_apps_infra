@@ -10,7 +10,7 @@ NAME ?= backend|frontend
 .PHONY: help
 help:
 	@echo "Targets:"
-	@echo "  deploy-dev - Apply infra and app manifests with git metadata"
+	@echo "  deploy-init - Apply infra and app manifests with git metadata"
 	@echo "  logs       - Tail logs for pods matching NAME (regex; default 'backend|frontend') in NAMESPACE"
 	@echo "  logs-backend  - Tail backend pod logs"
 	@echo "  logs-frontend - Tail frontend pod logs"
@@ -21,6 +21,7 @@ help:
 	@echo "  stop-load-test - Stop load test"
 	@echo "  pdb-status - Show PodDisruptionBudget status"
 	@echo "  install-prometheus - Install Prometheus stack via Helm (idempotent)"
+	@echo "  install-openebs - Install OpenEBS for persistent storage"
 	@echo "  install-loki - Install Loki stack for centralized logging"
 	@echo "  install-fluent-bit - Install classic Fluent Bit DaemonSet (no operator)"
 	@echo "  migrate-to-fluent - Replace Promtail with FluentOperator"
@@ -33,22 +34,37 @@ help:
 
 .PHONY: deploy-all
 deploy-all:
-	@echo "Deploying app and setting up monitoring with logging..."
+	@echo "Deploying app and setting up monitoring with persistent logging..."
 	@echo "Certs needs to be done manually..."
 	"$(MAKE)" ca-export
-	"$(MAKE)" deploy-dev
+	"$(MAKE)" deploy-init
+	"$(MAKE)" install-openebs
 	"$(MAKE)" install-prometheus
 	"$(MAKE)" install-loki
 	"$(MAKE)" setup-monitoring-ingress
 	"$(MAKE)" fix-monitoring-subpaths
 
 
-.PHONY: deploy-dev
-deploy-dev:
+.PHONY: deploy-init
+deploy-init:
 	@echo "Deploying with git metadata: SHA=$$(git rev-parse --short HEAD), BRANCH=$$(git branch --show-current), TIME=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	@BRANCH=$$(git branch --show-current); \
+	if [ "$$BRANCH" = "master" ] || [ "$$BRANCH" = "main" ]; then \
+		BRANCH_VALUE="master"; \
+	else \
+		BRANCH_VALUE="$$BRANCH"; \
+	fi; \
+	echo "Setting PROJECT_GIT_BRANCH to: $$BRANCH_VALUE"; \
 	$(KUBECTL) apply -f k8s/infra/cert-manager/cluster-issuer.yaml
 	$(KUBECTL) apply -f k8s/infra/nginx/ingress.yaml
-	$(KUBECTL) apply -f k8s/apps/app_one/
+	$(KUBECTL) apply -f k8s/apps/app_one/serviceaccount_backend.yaml
+	PROJECT_GIT_BRANCH=$$BRANCH_VALUE envsubst < k8s/apps/app_one/deployment_backend.yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) apply -f k8s/apps/app_one/deployment_frontend.yaml
+	$(KUBECTL) apply -f k8s/apps/app_one/service_backend.yaml
+	$(KUBECTL) apply -f k8s/apps/app_one/service_frontend.yaml
+	$(KUBECTL) apply -f k8s/apps/app_one/hpa_backend.yaml
+	$(KUBECTL) apply -f k8s/apps/app_one/pdb_backend.yaml
+	$(KUBECTL) apply -f k8s/apps/app_one/networkpolicy_backend_ingress.yaml
 	@echo "Waiting for deployments to be Available..."
 	-$(KUBECTL) -n $(NAMESPACE) wait --for=condition=Available --timeout=90s deploy --all
 	@echo "Git metadata available in: make logs-git or kubectl get deploy -o yaml | grep git-sha"
@@ -101,13 +117,41 @@ cleanup:
 	@echo "Cleaning up monitoring and logging stack..."
 	-helm uninstall prometheus -n monitoring
 	-helm uninstall loki -n monitoring
+	-helm uninstall openebs -n openebs-system
 	-$(KUBECTL) delete -f k8s/infra/logging/fluent-bit-classic.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/monitoring/logs-dashboard.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
 	-$(KUBECTL) delete namespace monitoring --ignore-not-found
 	-$(KUBECTL) delete namespace fluent-bit --ignore-not-found
+	-$(KUBECTL) delete namespace openebs-system --ignore-not-found
 	@echo "Cleanup complete (controllers may recreate some cert-manager resources)."
+
+.PHONY: install-openebs
+install-openebs:
+	@echo "Installing OpenEBS for persistent storage..."
+	helm repo add openebs https://openebs.github.io/charts
+	helm repo update
+	@if helm list -n openebs-system | grep -q openebs; then \
+		echo "OpenEBS already installed, skipping helm install"; \
+	else \
+		echo "Installing OpenEBS..."; \
+		helm install openebs openebs/openebs \
+		  --namespace openebs-system \
+		  --create-namespace \
+		  --set localprovisioner.enabled=true \
+		  --set lvm-localpv.enabled=true \
+		  --set zfs-localpv.enabled=false \
+		  --set mayastor.enabled=false \
+		  --set ndm.enabled=false \
+		  --set ndmOperator.enabled=false; \
+	fi
+	@echo "Waiting for OpenEBS pods to be ready..."
+	kubectl wait --for=condition=Ready pod -l component=localpv-provisioner -n openebs-system --timeout=120s
+	kubectl wait --for=condition=Ready pod -l app=openebs-lvm-controller -n openebs-system --timeout=120s
+	kubectl wait --for=condition=Ready pod -l app=openebs-lvm-node -n openebs-system --timeout=120s
+	@echo "OpenEBS core components ready! Available storage classes:"
+	kubectl get storageclass
 
 .PHONY: install-prometheus
 install-prometheus:
@@ -147,8 +191,12 @@ install-loki:
 		  --set grafana.enabled=false \
 		  --set promtail.enabled=true \
 		  --set loki.persistence.enabled=true \
-		  --set loki.persistence.size=10Gi; \
+		  --set loki.persistence.size=5Gi \
+		  --set loki.persistence.storageClassName=openebs-hostpath; \
 	fi
+	@echo "Fixing Loki datasource default setting to prevent conflicts..."
+	@sleep 5
+	kubectl patch configmap loki-loki-stack -n monitoring --type='merge' -p='{"data":{"loki-stack-datasource.yaml":"apiVersion: 1\ndatasources:\n- name: Loki\n  type: loki\n  access: proxy\n  url: \"http://loki:3100\"\n  version: 1\n  isDefault: false\n  jsonData:\n    {}\n"}}' || true
 	@echo "Setting up logs dashboard..."
 	"$(MAKE)" setup-logs-dashboard
 
@@ -290,6 +338,8 @@ fix-monitoring-subpaths:
 		--set grafana.grafana\\.ini.server.domain=myapp.local \
 		--set grafana.grafana\\.ini.server.enforce_domain=false \
 		--set prometheus.prometheusSpec.externalUrl=https://myapp.local/prometheus \
+		--set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.storageClassName=openebs-hostpath \
+		--set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage=10Gi \
 		--set prometheus.prometheusSpec.routePrefix=/
 	@echo "Waiting for pods to restart..."
 	$(KUBECTL) rollout status deployment prometheus-grafana -n monitoring --timeout=120s

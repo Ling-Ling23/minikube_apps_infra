@@ -12,10 +12,28 @@ spec:
       labels:
         app: py3miniapp-backend
     spec:
+      serviceAccountName: py3miniapp-backend-sa
+      # Pod-level security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534  # nobody user
+        runAsGroup: 65534  # nobody group
+        fsGroup: 65534
       containers:
       - name: py3miniapp-backend
         image: ghcr.io/ling-ling23/py3miniapp:v1
         #imagePullPolicy: Always
+        # Container-level security context (development-friendly)
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          readOnlyRootFilesystem: false  # Allow writing for development
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
         livenessProbe:
           httpGet:
             path: /live
@@ -37,6 +55,7 @@ spec:
         - name: PROJECT_DIR
           value: "/app/src"
         - name: PROJECT_GIT_BRANCH
-          value: "main"
+          value: "${PROJECT_GIT_BRANCH}"
         - name: PROJECT_GIT_URL
           value: "git@github.com:Ling-Ling23/minikube_apps_infra_app_one.git"
+        # No volume mounts needed in development mode
