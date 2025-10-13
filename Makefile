@@ -10,6 +10,7 @@ NAME ?= backend|frontend
 .PHONY: help
 help:
 	@echo "Targets:"
+	@echo "  deploy-all - Full deployment: infra, app, monitoring, logging, storage"
 	@echo "  deploy-init - Apply infra and app manifests with git metadata"
 	@echo "  logs       - Tail logs for pods matching NAME (regex; default 'backend|frontend') in NAMESPACE"
 	@echo "  logs-backend  - Tail backend pod logs"
@@ -20,6 +21,7 @@ help:
 	@echo "  load-test  - Start load test to trigger HPA scaling"
 	@echo "  stop-load-test - Stop load test"
 	@echo "  pdb-status - Show PodDisruptionBudget status"
+	@echo "  install-nginx-ingress - Install NGINX Ingress Controller via Helm"
 	@echo "  install-prometheus - Install Prometheus stack via Helm (idempotent)"
 	@echo "  install-openebs - Install OpenEBS for persistent storage"
 	@echo "  install-loki - Install Loki stack for centralized logging"
@@ -37,6 +39,7 @@ deploy-all:
 	@echo "Deploying app and setting up monitoring with persistent logging..."
 	@echo "Certs needs to be done manually..."
 	"$(MAKE)" ca-export
+	"$(MAKE)" install-nginx-ingress
 	"$(MAKE)" deploy-init
 	"$(MAKE)" install-openebs
 	"$(MAKE)" install-prometheus
@@ -111,21 +114,46 @@ ca-export:
 
 .PHONY: cleanup
 cleanup:
+	@echo "Cleaning up application resources..."
 	-$(KUBECTL) delete -f k8s/apps/app_one/ --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/cluster-issuer.yaml --ignore-not-found
 	@echo "Cleaning up monitoring and logging stack..."
 	-helm uninstall prometheus -n monitoring
 	-helm uninstall loki -n monitoring
-	-helm uninstall openebs -n openebs-system
+	-helm uninstall openebs -n openebs-system  
 	-$(KUBECTL) delete -f k8s/infra/logging/fluent-bit-classic.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/monitoring/logs-dashboard.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
 	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
-	-$(KUBECTL) delete namespace monitoring --ignore-not-found
-	-$(KUBECTL) delete namespace fluent-bit --ignore-not-found
-	-$(KUBECTL) delete namespace openebs-system --ignore-not-found
-	@echo "Cleanup complete (controllers may recreate some cert-manager resources)."
+	@echo "Cleaning up infrastructure components..."
+	-helm uninstall nginx-ingress -n default --ignore-not-found
+	-helm uninstall fluent-operator -n fluent --ignore-not-found
+	-helm uninstall cert-manager -n cert-manager --ignore-not-found
+	@echo "Cleaning up namespaces..."
+	#-$(KUBECTL) delete namespace monitoring --ignore-not-found
+	#-$(KUBECTL) delete namespace fluent-bit --ignore-not-found  
+	#-$(KUBECTL) delete namespace openebs-system --ignore-not-found
+	#-$(KUBECTL) delete namespace fluent --ignore-not-found
+	#-$(KUBECTL) delete namespace cert-manager --ignore-not-found
+	@echo "Cleanup complete (core Kubernetes components preserved)."
+
+.PHONY: install-nginx-ingress
+install-nginx-ingress:
+	@echo "Installing NGINX Ingress Controller..."
+	helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+	helm repo update
+	@if helm list -n default | grep -q nginx-ingress; then \
+		echo "NGINX Ingress already installed, skipping helm install"; \
+	else \
+		echo "Installing NGINX Ingress Controller..."; \
+		helm install nginx-ingress ingress-nginx/ingress-nginx \
+		  --namespace default; \
+	fi
+	@echo "Waiting for NGINX Ingress Controller to be ready..."
+	kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=ingress-nginx --timeout=120s
+	@echo "NGINX Ingress Controller ready!"
+	kubectl get service nginx-ingress-ingress-nginx-controller
 
 .PHONY: install-openebs
 install-openebs:
