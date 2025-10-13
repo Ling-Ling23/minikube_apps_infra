@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 # Env vars
 : "${PROJECT_DIR:=/app/src}"
-: "${PROJECT_GIT_BRANCH:=main}"
 : "${PROJECT_GIT_URL:=}"
 
 # Retry settings
@@ -76,6 +75,12 @@ git_clone_with_retries() {
 }
 
 main() {
+  # Only run git clone on master/main branch
+  if [ "$PROJECT_GIT_BRANCH" != "master" ] && [ "$PROJECT_GIT_BRANCH" != "main" ]; then
+    log "PROJECT_GIT_BRANCH is '$PROJECT_GIT_BRANCH', not master/main; skipping clone."
+    exit 0
+  fi
+
   if [ -z "${PROJECT_GIT_URL:-}" ]; then
     log "PROJECT_GIT_URL not set; skipping clone."
     exit 0
