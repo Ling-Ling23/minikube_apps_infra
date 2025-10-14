@@ -115,17 +115,17 @@ ca-export:
 .PHONY: cleanup
 cleanup:
 	@echo "Cleaning up application resources..."
-	-$(KUBECTL) delete -f k8s/apps/app_one/ --ignore-not-found
-	-$(KUBECTL) delete -f k8s/infra/nginx/ingress.yaml --ignore-not-found
-	-$(KUBECTL) delete -f k8s/infra/cert-manager/cluster-issuer.yaml --ignore-not-found
+	-$(KUBECTL) delete -f apps/app_one/ --ignore-not-found
+	-$(KUBECTL) delete -f infra/nginx/ingress.yaml --ignore-not-found
+	-$(KUBECTL) delete -f infra/cert-manager/cluster-issuer.yaml --ignore-not-found
 	@echo "Cleaning up monitoring and logging stack..."
 	-helm uninstall prometheus -n monitoring
 	-helm uninstall loki -n monitoring
 	-helm uninstall openebs -n openebs-system  
-	-$(KUBECTL) delete -f k8s/infra/logging/fluent-bit-classic.yaml --ignore-not-found
-	-$(KUBECTL) delete -f k8s/infra/monitoring/logs-dashboard.yaml --ignore-not-found
-	-$(KUBECTL) delete -f k8s/infra/nginx/monitoring-ingress.yaml --ignore-not-found
-	-$(KUBECTL) delete -f k8s/infra/cert-manager/monitoring-cert.yaml --ignore-not-found
+	-$(KUBECTL) delete -f infra/logging/fluent-bit-classic.yaml --ignore-not-found
+	-$(KUBECTL) delete -f infra/monitoring/logs-dashboard.yaml --ignore-not-found
+	-$(KUBECTL) delete -f infra/nginx/monitoring-ingress.yaml --ignore-not-found
+	-$(KUBECTL) delete -f infra/cert-manager/monitoring-cert.yaml --ignore-not-found
 	@echo "Cleaning up infrastructure components..."
 	-helm uninstall nginx-ingress -n default --ignore-not-found
 	-helm uninstall fluent-operator -n fluent --ignore-not-found
@@ -134,8 +134,8 @@ cleanup:
 	#-$(KUBECTL) delete namespace monitoring --ignore-not-found
 	#-$(KUBECTL) delete namespace fluent-bit --ignore-not-found  
 	#-$(KUBECTL) delete namespace openebs-system --ignore-not-found
-	#-$(KUBECTL) delete namespace fluent --ignore-not-found
 	#-$(KUBECTL) delete namespace cert-manager --ignore-not-found
+	#-$(KUBECTL) delete namespace fluent --ignore-not-found
 	@echo "Cleanup complete (core Kubernetes components preserved)."
 
 .PHONY: install-nginx-ingress
