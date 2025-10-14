@@ -1,2 +1,2 @@
 docker/secrets/*
-docs/*
+infra_makefile_deployment/docs/*
