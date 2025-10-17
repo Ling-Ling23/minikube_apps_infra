@@ -47,7 +47,7 @@ resource "kubernetes_ingress_v1" "my_app_ingress" {
           path_type = "ImplementationSpecific"
           backend {
             service {
-              name = "py3miniapp-frontend-service"  # This service doesn't exist yet
+              name = kubernetes_service.py3miniapp_frontend_service.metadata[0].name
               port {
                 number = 5000
               }

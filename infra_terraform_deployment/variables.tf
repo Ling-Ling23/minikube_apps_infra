@@ -13,8 +13,14 @@ variable "project_dir" {
   default     = "/app/src"
 }
 
-variable "app_replicas" {
+variable "app_replicas_backend" {
   description = "Number of replicas for the application"
   type        = number
   default     = 2
+}
+
+variable "app_replicas_frontend" {
+  description = "Number of replicas for the frontend application"
+  type        = number
+  default     = 1  # Single replica for development, change to 2+ for production
 }

@@ -1,6 +1,6 @@
 docker/secrets/*
 infra_makefile_deployment/docs/*
-
+infra_terraform_deployment/docs/*
 
 # Terraform gitignore for infra_terraform_deployment
 
